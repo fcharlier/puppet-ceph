@@ -22,40 +22,65 @@ grep -q "ceph-osd2" /etc/hosts || echo "192.168.251.102	ceph-osd2 ceph-osd2.test
 grep -q "ceph-mds0" /etc/hosts || echo "192.168.251.150	ceph-mds0 ceph-mds0.test" >> /etc/hosts
 grep -q "ceph-mds1" /etc/hosts || echo "192.168.251.151	ceph-mds1 ceph-mds1.test" >> /etc/hosts
 
-aptitude update
+# Use puppetlabs apt repositories
+if [ ! -f /root/puppetlabs-release.deb ]; then
+    wget -O /root/puppetlabs-release.deb http://apt.puppetlabs.com/puppetlabs-release-$(lsb_release -cs).deb
+fi
 
-# Install ruby 1.8 and ensure it is the default
-aptitude install -y ruby1.8
-update-alternatives --set ruby /usr/bin/ruby1.8
+export DEBIAN_FRONTEND=noninteractive
 
+dpkg -i /root/puppetlabs-release.deb
+
+apt-get update
+
+apt-get -y install puppet facter git
 
 # Install puppetmaster, etc. …
 if hostname | grep -q "ceph-mon0"; then
-    aptitude install -y puppetmaster sqlite3 libsqlite3-ruby libactiverecord-ruby git augeas-tools puppet ruby1.8-dev libruby1.8
+    apt-get install -y puppet facter puppetmaster augeas-tools puppetdb puppetdb-terminus
 
     # This lens seems to be broken currently on wheezy/sid ?
     # test -f /usr/share/augeas/lenses/dist/cgconfig.aug && rm -f /usr/share/augeas/lenses/dist/cgconfig.aug
     augtool << EOT
 set /files/etc/puppet/puppet.conf/agent/pluginsync true
+set /files/etc/puppet/puppet.conf/agent/report true
 set /files/etc/puppet/puppet.conf/agent/server ceph-mon0.test
 set /files/etc/puppet/puppet.conf/master/storeconfigs true
-set /files/etc/puppet/puppet.conf/master/dbadapter sqlite3
+set /files/etc/puppet/puppet.conf/master/storeconfigs_backend puppetdb
+set /files/etc/puppet/puppet.conf/master/reports store,puppetdb
 save
+EOT
+
+    cat << EOT > /etc/puppet/puppetdb.conf
+[main]
+server=ceph-mon0.test
+port=8081
+EOT
+cat << EOT > /etc/puppet/routes.yaml
+---
+master:
+  facts:
+    terminus: puppetdb
+    cache: yaml
 EOT
 
     # Autosign certificates from our test setup
     echo "*.test" > /etc/puppet/autosign.conf
 
-    test -f /etc/puppet/modules/concat || puppet module install ripienaar/concat
-    test -f /etc/puppet/modules/apt || puppet module install puppetlabs/apt
-    test -f /etc/puppet/modules/ceph || git clone /vagrant /etc/puppet/modules/ceph
+    test -d /etc/puppet/modules/concat || puppet module install ripienaar/concat
+    test -d /etc/puppet/modules/apt || puppet module install puppetlabs/apt
+    test -d /etc/puppet/modules/ceph || git clone /vagrant /etc/puppet/modules/ceph
 
     test -h /etc/puppet/manifests/site.pp || ln -s /etc/puppet/modules/ceph/examples/site.pp /etc/puppet/manifests/
     pushd /etc/puppet/modules/ceph
     git pull
     popd
 
+    service puppetdb restart
     service puppetmaster restart
+    echo "******* waiting 5 seconds for services to settle *******"
+sleep 5
+
 else
     aptitude install -y augeas-tools
 
