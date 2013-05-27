@@ -31,6 +31,11 @@ export DEBIAN_FRONTEND=noninteractive
 
 dpkg -i /root/puppetlabs-release.deb
 
+# Remove all previous installs of Puppet/Chef
+
+apt-get -y autoremove --purge puppet chef
+gem list|awk '{ print $1 }'|xargs gem uninstall -a || echo "Passing"
+
 apt-get update
 
 apt-get -y install puppet facter git

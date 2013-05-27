@@ -1,12 +1,35 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+def parse_vagrant_config(
+  config_file=File.expand_path(File.join(File.dirname(__FILE__), 'config.yaml'))
+)
+  require 'yaml'
+  config = {
+    'operatingsystem' => 'debian',
+  }
+  if File.exists?(config_file)
+    overrides = YAML.load_file(config_file)
+    config.merge!(overrides)
+  end
+  config
+end
+
 Vagrant::Config.run do |config|
-  config.vm.box = "wheezy"
-  config.vm.box_url = "https://labs.enovance.com/pub/wheezy.box"
-  
-  config.vm.customize ["modifyvm", :id, "--nictype1", "virtio"]
-  config.vm.customize ["modifyvm", :id, "--macaddress1", "auto"]
+  v_config = parse_vagrant_config
+
+  if v_config['operatingsystem'] == 'debian'
+    config.vm.box = "wheezy64"
+    config.vm.box_url = "https://labs.enovance.com/pub/wheezy64.box"
+  elsif v_config['operatingsystem'] == 'ubuntu'
+    config.vm.box = "precise64"
+    config.vm.box_url = "https://labs.enovance.com/pub/precise64.box"
+  end
+
+  local_shell_provisionner = File.expand_path("~/.vagrant.d/local.sh")
+  if File.exists?(local_shell_provisionner)
+    config.vm.provision :shell, :path => local_shell_provisionner
+  end
 
   (0..2).each do |i|
     config.vm.define "mon#{i}" do |mon|
