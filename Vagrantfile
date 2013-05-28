@@ -34,6 +34,9 @@ Vagrant::Config.run do |config|
   (0..2).each do |i|
     config.vm.define "mon#{i}" do |mon|
       mon.vm.host_name = "ceph-mon#{i}.test"
+      if i == 0
+        mon.vm.customize [ "modifyvm", :id, "--memory", "768"]
+      end
       mon.vm.network :hostonly, "192.168.251.1#{i}", { :nic_type => 'virtio' }
       mon.vm.network :hostonly, "192.168.252.1#{i}", { :nic_type => 'virtio' }
       mon.vm.provision :shell, :path => "examples/mon.sh"
